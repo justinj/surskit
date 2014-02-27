@@ -17,9 +17,6 @@
             });
 
             var MyWorld = Skrit.createWorld({
-                update: function() {
-                    this._update();
-                }
             });
 
             var world = new MyWorld();
@@ -27,26 +24,24 @@
 
             var Guy = Skrit.createEntity({
                 update: function() {
+                    if (this.game.keys[this.game.Input.UP]) {
+                        this.y -= 2;
+                    }
+                    if (this.game.keys[this.game.Input.DOWN]) {
+                        this.y += 2;
+                    }
+                    if (this.game.keys[this.game.Input.LEFT]) {
+                        this.x -= 2;
+                    }
+                    if (this.game.keys[this.game.Input.RIGHT]) {
+                        this.x += 2;
+                    }
                 },
-                sprite: "pic.png"
+                image: "pic.png"
             });
 
             var guy = new Guy();
             world.add(guy);
-
-            var texture = PIXI.Texture.fromImage("pic.png");
-
-            var guy = new PIXI.Sprite(texture);
-
-            // center the sprites anchor point
-            guy.anchor.x = 0.5;
-            guy.anchor.y = 0.5;
-
-            // move the sprite t the center of the screen
-            guy.position.x = 200;
-            guy.position.y = 150;
-            game.addChild(guy);
-
         </script>
     </body>
 </html>
