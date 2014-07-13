@@ -1,0 +1,23 @@
+{
+  "name": "skrit",
+  "version": "0.0.0",
+  "description": "Micro game framework for JS",
+  "main": "skrit.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/justinj/skrit.git"
+  },
+  "author": "Justin Jaffray",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/justinj/skrit/issues"
+  },
+  "homepage": "https://github.com/justinj/skrit",
+  "dependencies": {
+    "pixi": "^0.2.1",
+    "pixi.js": "^1.5.3"
+  }
+}

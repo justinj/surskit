@@ -26,7 +26,7 @@ Skrit = (function() {
             var renderer;
 
             var stage = new PIXI.Stage(spec.backgroundColor);
-            var renderer = new PIXI.WebGLRenderer(spec.width, spec.height);
+            var renderer = new PIXI.CanvasRenderer(spec.width, spec.height);
             spec.container.appendChild(renderer.view);
             requestAnimFrame(animate);
 
