@@ -7,6 +7,10 @@ var KEYS = {
   40: "down"
 };
 
+for (var i = 65; i < 91; i++) {
+  KEYS[i] = String.fromCharCode(i).toLowerCase();
+}
+
 // nop -> no-op -> no operation
 var nop = function() {};
 
@@ -14,9 +18,27 @@ var toKeyname = function(keycode) {
   return KEYS[keycode];
 };
 
+var extend = function(target, source) {
+  var properties = Object.keys(source);
+  properties.forEach(function(prop) {
+    if (target[prop]) {
+      // should be a safe way to get around this, look into
+      console.warn("You are overwriting a built-in method with " + prop)
+    }
+    target[prop] = source[prop];
+  });
+
+}
+
 Skrit.entity = function(spec) {
   var constructor = function() {
     var self = this;
+
+    // the sprite idea is sort of half-baked atm, should figure out exactly how
+    // this should work
+    this.sprite = {
+      flipped: false
+    };
 
     this.width = 0;
     this.height = 0;
@@ -30,55 +52,120 @@ Skrit.entity = function(spec) {
     }
 
     // If the user didn't specify these just do nothing
-    this.userUpdate = (spec.update || nop).bind(this);
+    this.update = (spec.update || nop).bind(this);
     var constructorArgs = arguments;
     this.born = function() {
       (spec.born || nop).apply(self, constructorArgs);
     };
-    this.userRender = (spec.render || nop).bind(this);
+    this.render = (spec.render || nop).bind(this);
 
     this.x = spec.x || 0;
     this.y = spec.y || 0;
   };
 
-  constructor.prototype.update = function(context) {
-    this.userUpdate(context);
+  constructor.prototype.setCollisionType = function(type) {
+    this.world.setCollisionType(this, type);
+  }
+
+  constructor.prototype._collide = function(type) {
   };
 
-  constructor.prototype.render = function(ctx) {
+  constructor.prototype._update = function(context) {
+    this.update(context);
+  };
+
+  constructor.prototype._render = function(ctx) {
     if (this.image) {
+      var x = this.x;
       var w = this.image.width;
       var h = this.image.height;
-      ctx.drawImage(this.image, 0, 0, w, h, this.x, this.y, w, h);
+      ctx.save()
+      // ewww
+      if (this.sprite.flipped) {
+        ctx.scale(-1, 1);
+        w = -w;
+        x = -x;
+      }
+      //
+      ctx.drawImage(this.image, x | 0, this.y | 0, w, h);
+      //
+      ctx.restore()
+      //
     }
-    this.userRender(ctx);
+    this.render(ctx);
   };
+
+  constructor.prototype.collide = function(type, x, y) {
+    var i;
+    var collidables = this.world.collidables[type] || [];
+    for (i = 0; i < collidables.length; i++) {
+      var c = collidables[i];
+      if (x < c.x + c.width && x + this.width > c.x) {
+        if (y < c.y + c.height && y + this.height > c.y) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  extend(constructor.prototype, spec);
 
   return constructor;
 };
 
+var removeFromArray = function(arr, elem) {
+  var index = arr.indexOf(elem);
+  if (index > -1) {
+    arr.splice(index, 1);
+  }
+}
+
 Skrit.world = function(spec) {
   var constructor = function() {
     this.entities = [];
+    this.collidables = {};
   };
 
   constructor.prototype.add = function(entity) {
+    // see if we actually need this whole object in the future
     this.entities.push(entity);
+    // :/ a bit ew-ish
+    entity.world = this;
     entity.born();
   };
 
+  constructor.prototype.setCollisionType = function(entity, type) {
+    if (entity._collisionType && this.collidables[entity._collisionType]) {
+      removeFromArray(this.collidables[entity._collisionType], entity);
+    }
+    entity._collisionType = type;
+    this.collidables[type] = this.collidables[type] || [];
+    this.collidables[type].push(entity);
+  };
+
   constructor.prototype.animate = function(context) {
+    context.world = this;
     this.entities.forEach(function(entity) {
-      entity.update(context);
+      entity._update(context);
     });
 
+    context.keys.pressed = {};
+
     context.canvas.width = context.canvas.width;
+
+    context.canvasContext.imageSmoothingEnabled = false;
+    context.canvasContext.webkitImageSmoothingEnabled = false;
+    context.canvasContext.scale(this.game.scale, this.game.scale);
+
     // context.canvasContext.clearRect(0, 0, context.game.width, context.game.height);
     this.entities.forEach(function(entity) {
-      entity.render(context.canvasContext);
+      entity._render(context.canvasContext);
     });
     context.canvasContext.stroke();
   };
+
+  extend(constructor.prototype, spec);
 
   return constructor;
 };
@@ -86,18 +173,26 @@ Skrit.world = function(spec) {
 Skrit.game = function(spec) {
   var constructor = function() {
     this.currentWorld = spec.world;
+    this.currentWorld.game = this;
 
     var canvas = document.createElement("canvas");
 
     this.mouse = {};
     this.width = canvas.width = spec.width || 640;
     this.height = canvas.height = spec.height || 480;
+    this.scale = spec.scale;
     this.canvas = canvas;
     this.canvasContext = canvas.getContext("2d");
+
+    // TODO: need to do this for other browsers
+
     spec.container.appendChild(canvas);
   };
 
   constructor.prototype._animate = function() {
+    this.canvasContext.imageSmoothingEnabled = false;
+    this.canvasContext.webkitImageSmoothingEnabled = false;
+
     this.currentWorld.animate({
       canvas: this.canvas,
       canvasContext: this.canvasContext,
@@ -114,9 +209,11 @@ Skrit.game = function(spec) {
     // keep track of all the keys
     var self = this;
 
-    this.keys = [];
+    this.keys = {};
+    this.keys.pressed = {};
     document.addEventListener("keydown", function(e) {
       self.keys[toKeyname(e.keyCode)] = true;
+      self.keys.pressed[toKeyname(e.keyCode)] = true;
     });
 
     document.addEventListener("keyup", function(e) {
@@ -128,8 +225,8 @@ Skrit.game = function(spec) {
     });
 
     document.addEventListener("mousemove", function(e) {
-      self.mouse.x = e.x;
-      self.mouse.y = e.y;
+      self.mouse.x = e.x - e.toElement.offsetLeft;
+      self.mouse.y = e.y - e.toElement.offsetTop;
     });
 
     requestAnimationFrame(this._animate.bind(this));
