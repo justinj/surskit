@@ -14,29 +14,37 @@ var approach = function(val, target, speed) {
   return newVal;
 }
 
+var toSpeed = function(accelLevel) {
+  return accelLevel * 3;
+}
+
 var AIR_FRICTION = 1;
 var FRICTION = 1;
-var ACCELERATION = 3;
-var SPEED = 5;
+var ACCELERATION = 0.1;
+var SPEED = 1;
 var GRAVITY = 0.25;
 var JUMP_SPEED = 6;
-var MAX_FALL_SPEED = 6;
+var MAX_FALL_SPEED = 15;
 
 var Guy = Skrit.entity({
-  image: "/pic.png",
+  image: "pic.png",
   born: function() {
     this.xspeed = 0;
     this.yspeed = 0;
     this.hasDoubleJump = true;
+    this.width = 30;
+    this.height = 40;
+    this.hitboxOffsetLeft = 20;
+    this.hitboxOffsetTop = 20;
+    this.facingRight = false;
   },
   render: function(drawer) {
-    drawer.rect(0, 0, 30, 30);
-    drawer.rect(this.x, this.y, this.width, this.height);
+    drawer.rect(this.x + this.hitboxOffsetLeft, this.y + this.hitboxOffsetTop, this.width, this.height);
   },
   update: function(context) {
     var onGround = this.collide("block", this.x, this.y + 1);
     this.hasDoubleJump = this.hasDoubleJump || onGround;
-    if (context.keys.pressed.up) {
+    if (context.keys.pressed.space) {
       if (onGround) {
         this.yspeed = -JUMP_SPEED;
         this.hasDoubleJump = true;
@@ -46,20 +54,17 @@ var Guy = Skrit.entity({
       }
     }
 
-    if (context.keys.down && this.yspeed > -1) {
-      this.yspeed = MAX_FALL_SPEED;
+    if (context.keys.pressed.down && this.yspeed > -2) {
+      this.yspeed += MAX_FALL_SPEED/2;
     }
 
-    if (context.keys.left && !context.keys.right) {
-      if (onGround) {
-        this.sprite.flipped = true;
-      }
+    this.sprite.flipped = this.facingRight;
+    if (context.keys.a && !context.keys.d) {
       this.xspeed = approach(this.xspeed, -SPEED, ACCELERATION);
-    } else if (context.keys.right && !context.keys.left) {
-      if (onGround) {
-        this.sprite.flipped = false;
-      }
+      this.facingRight = true;
+    } else if (context.keys.d && !context.keys.a) {
       this.xspeed = approach(this.xspeed, SPEED, ACCELERATION);
+      this.facingRight = false;
     } else {
       if (onGround) {
         this.xspeed = approach(this.xspeed, 0, FRICTION);
@@ -67,11 +72,17 @@ var Guy = Skrit.entity({
         this.xspeed = approach(this.xspeed, 0, AIR_FRICTION);
       }
     }
-    if (!this.collide("block", this.x + this.xspeed, this.y)) {
-      this.x += this.xspeed;
+    if (context.keys.left && !context.keys.right) {
+      this.facingRight = true;
+    } else if (!context.keys.left && context.keys.right) {
+      this.facingRight = false;
+    }
+    var spd = toSpeed(this.xspeed);
+    if (!this.collide("block", this.x + spd, this.y)) {
+      this.x += toSpeed(this.xspeed);
     } else {
-      while (!this.collide("block", this.x + sign(this.xspeed), this.y)) {
-        this.x += sign(this.xspeed);
+      while (!this.collide("block", this.x + sign(spd), this.y)) {
+        this.x += sign(spd);
       }
       this.xspeed = 0;
     }
@@ -132,6 +143,8 @@ world.add(new Guy());
 for (var i = 0; i < 20; i++) {
   world.add(new Block({x: i * 20, y: 200}));
 }
+
+world.add(new Block({x: 0, y: 150}));
 
 var game = new Game();
 

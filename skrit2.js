@@ -1,6 +1,7 @@
 var Skrit = {};
 
 var KEYS = {
+  32: "space",
   37: "left",
   38: "up",
   39: "right",
@@ -40,13 +41,19 @@ Skrit.entity = function(spec) {
       flipped: false
     };
 
-    this.width = 0;
-    this.height = 0;
+    this.hitboxOffsetLeft = 0;
+    this.hitboxOffsetTop = 0;
+    this.width = null;
+    this.height = null;
     if (spec.image) {
       this.image = new Image();
       this.image.onload = function() {
-        self.width = this.width;
-        self.height = this.height;
+        if (self.width == null) {
+          self.width = this.width;
+        }
+        if (self.height == null) {
+          self.height = this.height;
+        }
       };
       this.image.src = spec.image;
     }
@@ -67,9 +74,6 @@ Skrit.entity = function(spec) {
     this.world.setCollisionType(this, type);
   }
 
-  constructor.prototype._collide = function(type) {
-  };
-
   constructor.prototype._update = function(context) {
     this.update(context);
   };
@@ -80,7 +84,7 @@ Skrit.entity = function(spec) {
       var w = this.image.width;
       var h = this.image.height;
       ctx.save()
-      // ewww
+      // ewww I suspect this is going to be super slow
       if (this.sprite.flipped) {
         ctx.scale(-1, 1);
         w = -w;
@@ -98,6 +102,8 @@ Skrit.entity = function(spec) {
   constructor.prototype.collide = function(type, x, y) {
     var i;
     var collidables = this.world.collidables[type] || [];
+    x += this.hitboxOffsetLeft;
+    y += this.hitboxOffsetTop;
     for (i = 0; i < collidables.length; i++) {
       var c = collidables[i];
       if (x < c.x + c.width && x + this.width > c.x) {
@@ -150,10 +156,15 @@ Skrit.world = function(spec) {
       entity._update(context);
     });
 
+    // these are only recognized for a single frame
     context.keys.pressed = {};
 
+    // clears the context
     context.canvas.width = context.canvas.width;
 
+    // might be slow to assign these every time, maybe should be just set once,
+    // but assigning the width to clear the canvas above resets the context
+    // these let scaled up pixel art draw crisply
     context.canvasContext.imageSmoothingEnabled = false;
     context.canvasContext.webkitImageSmoothingEnabled = false;
     context.canvasContext.scale(this.game.scale, this.game.scale);
@@ -184,8 +195,6 @@ Skrit.game = function(spec) {
     this.canvas = canvas;
     this.canvasContext = canvas.getContext("2d");
 
-    // TODO: need to do this for other browsers
-
     spec.container.appendChild(canvas);
   };
 
@@ -212,8 +221,13 @@ Skrit.game = function(spec) {
     this.keys = {};
     this.keys.pressed = {};
     document.addEventListener("keydown", function(e) {
+      var keyName = toKeyname(e.keyCode);
+      // keydown is fired a bunch of times, so check if we were already holding
+      // it down.
+      if (!self.keys[keyName]) {
+        self.keys.pressed[keyName] = true;
+      }
       self.keys[toKeyname(e.keyCode)] = true;
-      self.keys.pressed[toKeyname(e.keyCode)] = true;
     });
 
     document.addEventListener("keyup", function(e) {
