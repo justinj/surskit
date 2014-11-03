@@ -8,6 +8,9 @@ var KEYS = {
   40: "down"
 };
 
+// I think the default for RAF
+var FPS = 60;
+
 for (var i = 65; i < 91; i++) {
   KEYS[i] = String.fromCharCode(i).toLowerCase();
 }
@@ -38,24 +41,33 @@ Skrit.entity = function(spec) {
     // the sprite idea is sort of half-baked atm, should figure out exactly how
     // this should work
     this.sprite = {
-      flipped: false
+      flipped: false,
+      currentAnimation: null,
+      currentFrame: 0,
+      delayToNextFrame: null
     };
 
     this.hitboxOffsetLeft = 0;
     this.hitboxOffsetTop = 0;
     this.width = null;
     this.height = null;
-    if (spec.image) {
-      this.image = new Image();
-      this.image.onload = function() {
-        if (self.width == null) {
-          self.width = this.width;
-        }
-        if (self.height == null) {
-          self.height = this.height;
-        }
-      };
-      this.image.src = spec.image;
+
+    if (spec.sprite) {
+      this.sprite.rows = spec.sprite.rows || 1;
+      this.sprite.columns = spec.sprite.columns || 1;
+      this.sprite.animations = spec.sprite.animations || [];
+      if (spec.sprite.image) {
+        this.image = new Image();
+        this.image.onload = function() {
+          if (self.width == null) {
+            self.width = this.width;
+          }
+          if (self.height == null) {
+            self.height = this.height;
+          }
+        };
+        this.image.src = spec.sprite.image;
+      }
     }
 
     // If the user didn't specify these just do nothing
@@ -65,6 +77,20 @@ Skrit.entity = function(spec) {
       (spec.born || nop).apply(self, constructorArgs);
     };
     this.render = (spec.render || nop).bind(this);
+
+    // Might want to add an option to replay the animation if it's already playing (like flashpunk
+    // has)
+    this.playAnimation = function(name) {
+      var animation = this.sprite.animations[name];
+      // Might want to add an option to replay the animation if it's already playing (like flashpunk
+      // has)
+      if (animation == this.sprite.currentAnimation) {
+        return;
+      }
+      this.sprite.currentAnimation = animation;
+      this.sprite.currentFrame = 0;
+      this.sprite.delayToNextFrame = animation.delay;
+    };
 
     this.x = spec.x || 0;
     this.y = spec.y || 0;
@@ -81,17 +107,30 @@ Skrit.entity = function(spec) {
   constructor.prototype._render = function(ctx) {
     if (this.image) {
       var x = this.x;
-      var w = this.image.width;
-      var h = this.image.height;
+      var w = this.image.width / this.sprite.columns;
+      var h = this.image.height / this.sprite.rows;
       ctx.save()
+      var dw = w;
+      var dh = h;
       // ewww I suspect this is going to be super slow
       if (this.sprite.flipped) {
         ctx.scale(-1, 1);
         w = -w;
         x = -x;
       }
+      var frameX = this.sprite.currentAnimation.frames[this.sprite.currentFrame] % this.sprite.columns;
+      var frameY = Math.floor(this.sprite.currentAnimation.frames[this.sprite.currentFrame] / this.sprite.columns);
+      if (this.sprite.currentAnimation.frames.length > 1) {
+        this.sprite.delayToNextFrame -= 1/FPS;
+        if (this.sprite.delayToNextFrame <= 0) {
+          this.sprite.currentFrame+=1;
+          this.sprite.delayToNextFrame = this.sprite.currentAnimation.delay;
+          this.sprite.currentFrame %= this.sprite.currentAnimation.frames.length;
+        }
+      }
       //
-      ctx.drawImage(this.image, x | 0, this.y | 0, w, h);
+      ctx.drawImage(this.image, dw * frameX, 0,
+                    dw, dh, x | 0, this.y | 0, w, h);
       //
       ctx.restore()
       //
@@ -141,6 +180,17 @@ Skrit.world = function(spec) {
     entity.born();
   };
 
+  constructor.prototype.remove = function(entity) {
+    // naive but simple
+    for (var i = 0; i < this.entities.length; i++) {
+      if (entity == this.entities[i]) {
+        this.entities.splice(i,1);
+        return;
+      }
+    }
+    throw new Error("Removed entity that was not in the world!");
+  };
+
   constructor.prototype.setCollisionType = function(entity, type) {
     if (entity._collisionType && this.collidables[entity._collisionType]) {
       removeFromArray(this.collidables[entity._collisionType], entity);
@@ -169,7 +219,8 @@ Skrit.world = function(spec) {
     context.canvasContext.webkitImageSmoothingEnabled = false;
     context.canvasContext.scale(this.game.scale, this.game.scale);
 
-    // context.canvasContext.clearRect(0, 0, context.game.width, context.game.height);
+    context.canvasContext.fillStyle = "#099";
+    context.canvasContext.fillRect(0, 0, context.game.width, context.game.height);
     this.entities.forEach(function(entity) {
       entity._render(context.canvasContext);
     });
