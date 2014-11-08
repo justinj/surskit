@@ -73,12 +73,8 @@ Skrit.entity = function(spec) {
       if (specSprite.image) {
         self.image = new Image();
         self.image.onload = function() {
-          if (self.width == null) {
-            self.width = pixelsToUnits(this.width);
-          }
-          if (self.height == null) {
-            self.height = pixelsToUnits(this.height);
-          }
+          self.width = pixelsToUnits(this.width);
+          self.height = pixelsToUnits(this.height);
         };
         self.image.src = specSprite.image;
       }
@@ -130,6 +126,7 @@ Skrit.entity = function(spec) {
 
   proto._render = function(canvasContext) {
     var self = this;
+    canvasContext.save()
     if (self.image) {
       var x = unitsToPixels(self.x);
       var y = unitsToPixels(self.y);
@@ -137,7 +134,6 @@ Skrit.entity = function(spec) {
       var h = self.image.height / self.sprite.rows;
       var sprite = self.sprite;
       var animation = sprite.animation;
-      canvasContext.save()
       var dw = w;
       var dh = h;
       // ewww I suspect this is going to be super slow
@@ -156,14 +152,12 @@ Skrit.entity = function(spec) {
           sprite.currentFrame %= animation.frames.length;
         }
       }
-      //
       canvasContext.drawImage(self.image, dw * frameX, dh * frameY,
                     dw, dh, x | 0, y | 0, w, h);
-      //
-      canvasContext.restore()
-      //
     }
+    canvasContext.scale(1/PIXELS_PER_UNIT, 1/PIXELS_PER_UNIT);
     self.render(canvasContext);
+    canvasContext.restore();
   };
 
   proto.collide = function(type, x, y) {
@@ -277,9 +271,9 @@ Skrit.game = function(spec) {
     var canvas = document.createElement("canvas");
 
     self.mouse = {};
-    self.width = canvas.width = spec.width || 640;
-    self.height = canvas.height = spec.height || 480;
     self.scale = spec.scale;
+    self.width = pixelsToUnits(canvas.width = spec.width || 640) / spec.scale;
+    self.height = pixelsToUnits(canvas.height = spec.height || 480) / spec.scale;
     self.canvas = canvas;
     self.canvasContext = canvas.getContext("2d");
 
