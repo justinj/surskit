@@ -1,5 +1,13 @@
 var Skrit = {};
 
+// README:
+// Skrit is a micro-game engine that should always compile to 4096 bytes or less.
+// Some notes on minification:
+// * Uglify will rename things if they are local variables, so sometimes you will see
+//   local variables introduced somewhat unnecessarily.
+
+(function() {
+// Adding more of these is going to be a problem for size
 var KEYS = {
   32: "space",
   37: "left",
@@ -7,9 +15,16 @@ var KEYS = {
   39: "right",
   40: "down"
 };
+var toKeyname = function(keycode) { return KEYS[keycode]; };
 
 // I think the default for RAF
 var FPS = 60;
+
+// This might be a controversial thing... I think it's a nice way to do it though
+var PIXELS_PER_UNIT = 100;
+
+var unitsToPixels = function(units) { return units / PIXELS_PER_UNIT; };
+var pixelsToUnits = function(pixels) { return pixels * PIXELS_PER_UNIT; };
 
 for (var i = 65; i < 91; i++) {
   KEYS[i] = String.fromCharCode(i).toLowerCase();
@@ -18,10 +33,7 @@ for (var i = 65; i < 91; i++) {
 // nop -> no-op -> no operation
 var nop = function() {};
 
-var toKeyname = function(keycode) {
-  return KEYS[keycode];
-};
-
+// Shallowly copies all the properties from source to target.
 var extend = function(target, source) {
   var properties = Object.keys(source);
   properties.forEach(function(prop) {
@@ -31,7 +43,6 @@ var extend = function(target, source) {
     }
     target[prop] = source[prop];
   });
-
 }
 
 Skrit.entity = function(spec) {
@@ -40,113 +51,130 @@ Skrit.entity = function(spec) {
 
     // the sprite idea is sort of half-baked atm, should figure out exactly how
     // this should work
-    this.sprite = {
+    var sprite = self.sprite = {
       flipped: false,
-      currentAnimation: null,
+      // Default animation should just be to show the first frame
+      animation: { frames: [0] },
       currentFrame: 0,
       delayToNextFrame: null
     };
 
-    this.hitboxOffsetLeft = 0;
-    this.hitboxOffsetTop = 0;
-    this.width = null;
-    this.height = null;
+    var specSprite = spec.sprite;
 
-    if (spec.sprite) {
-      this.sprite.rows = spec.sprite.rows || 1;
-      this.sprite.columns = spec.sprite.columns || 1;
-      this.sprite.animations = spec.sprite.animations || [];
-      if (spec.sprite.image) {
-        this.image = new Image();
-        this.image.onload = function() {
+    self.hitboxLeft = 0;
+    self.hitboxTop = 0;
+    self.width = null;
+    self.height = null;
+
+    if (specSprite) {
+      sprite.rows = specSprite.rows || 1;
+      sprite.columns = specSprite.columns || 1;
+      sprite.animations = specSprite.animations || [];
+      if (specSprite.image) {
+        self.image = new Image();
+        self.image.onload = function() {
           if (self.width == null) {
-            self.width = this.width;
+            self.width = pixelsToUnits(this.width);
           }
           if (self.height == null) {
-            self.height = this.height;
+            self.height = pixelsToUnits(this.height);
           }
         };
-        this.image.src = spec.sprite.image;
+        self.image.src = specSprite.image;
       }
     }
 
     // If the user didn't specify these just do nothing
-    this.update = (spec.update || nop).bind(this);
+    self.update = (spec.update || nop).bind(self);
     var constructorArgs = arguments;
-    this.born = function() {
+    self.born = function() {
       (spec.born || nop).apply(self, constructorArgs);
     };
-    this.render = (spec.render || nop).bind(this);
+    self.render = (spec.render || nop).bind(self);
 
-    // Might want to add an option to replay the animation if it's already playing (like flashpunk
-    // has)
-    this.playAnimation = function(name) {
-      var animation = this.sprite.animations[name];
-      // Might want to add an option to replay the animation if it's already playing (like flashpunk
-      // has)
-      if (animation == this.sprite.currentAnimation) {
-        return;
-      }
-      this.sprite.currentAnimation = animation;
-      this.sprite.currentFrame = 0;
-      this.sprite.delayToNextFrame = animation.delay;
-    };
-
-    this.x = spec.x || 0;
-    this.y = spec.y || 0;
+    self.x = spec.x || 0;
+    self.y = spec.y || 0;
   };
 
-  constructor.prototype.setCollisionType = function(type) {
-    this.world.setCollisionType(this, type);
-  }
+  var proto = constructor.prototype;
 
-  constructor.prototype._update = function(context) {
+  // Might want to add an option to replay the animation if it's already playing (like flashpunk
+  // has)
+  proto.playAnimation = function(name) {
+    var self = this;
+    var animation = self.sprite.animations[name];
+    // Might want to add an option to replay the animation if it's already playing (like flashpunk
+    // has)
+    if (animation === self.sprite.animation) {
+      return;
+    }
+    self.sprite.animation = animation;
+    self.sprite.currentFrame = 0;
+    self.sprite.delayToNextFrame = animation.delay;
+  };
+
+  // I'm a little concerned about the implications of allowing callbacks, but let's try it for now
+  proto.addAlarm = function(delay, callback) {
+    // In reality, we should do this ourselves, so that the alarms are synced with the framerate of
+    // the game. This will do for now.
+    setTimeout(callback, delay * 1000);
+  };
+
+  proto.setCollisionType = function(type) {
+    this.world.setCollisionType(this, type);
+  };
+
+  proto._update = function(context) {
     this.update(context);
   };
 
-  constructor.prototype._render = function(ctx) {
-    if (this.image) {
-      var x = this.x;
-      var w = this.image.width / this.sprite.columns;
-      var h = this.image.height / this.sprite.rows;
-      ctx.save()
+  proto._render = function(canvasContext) {
+    var self = this;
+    if (self.image) {
+      var x = unitsToPixels(self.x);
+      var y = unitsToPixels(self.y);
+      var w = self.image.width / self.sprite.columns;
+      var h = self.image.height / self.sprite.rows;
+      var sprite = self.sprite;
+      var animation = sprite.animation;
+      canvasContext.save()
       var dw = w;
       var dh = h;
       // ewww I suspect this is going to be super slow
-      if (this.sprite.flipped) {
-        ctx.scale(-1, 1);
+      if (sprite.flipped) {
+        canvasContext.scale(-1, 1);
         w = -w;
         x = -x;
       }
-      var frameX = this.sprite.currentAnimation.frames[this.sprite.currentFrame] % this.sprite.columns;
-      var frameY = Math.floor(this.sprite.currentAnimation.frames[this.sprite.currentFrame] / this.sprite.columns);
-      if (this.sprite.currentAnimation.frames.length > 1) {
-        this.sprite.delayToNextFrame -= 1/FPS;
-        if (this.sprite.delayToNextFrame <= 0) {
-          this.sprite.currentFrame+=1;
-          this.sprite.delayToNextFrame = this.sprite.currentAnimation.delay;
-          this.sprite.currentFrame %= this.sprite.currentAnimation.frames.length;
+      var frameX = animation.frames[sprite.currentFrame] % sprite.columns;
+      var frameY = Math.floor(animation.frames[sprite.currentFrame] / sprite.columns);
+      if (animation.frames.length > 1) {
+        sprite.delayToNextFrame -= 1/FPS;
+        if (sprite.delayToNextFrame <= 0) {
+          sprite.currentFrame += 1;
+          sprite.delayToNextFrame = animation.delay;
+          sprite.currentFrame %= animation.frames.length;
         }
       }
       //
-      ctx.drawImage(this.image, dw * frameX, 0,
-                    dw, dh, x | 0, this.y | 0, w, h);
+      canvasContext.drawImage(self.image, dw * frameX, dh * frameY,
+                    dw, dh, x | 0, y | 0, w, h);
       //
-      ctx.restore()
+      canvasContext.restore()
       //
     }
-    this.render(ctx);
+    self.render(canvasContext);
   };
 
-  constructor.prototype.collide = function(type, x, y) {
-    var i;
-    var collidables = this.world.collidables[type] || [];
-    x += this.hitboxOffsetLeft;
-    y += this.hitboxOffsetTop;
-    for (i = 0; i < collidables.length; i++) {
+  proto.collide = function(type, x, y) {
+    var self = this;
+    var collidables = self.world.collidables[type] || [];
+    x += self.hitboxLeft;
+    y += self.hitboxTop;
+    for (var i = 0; i < collidables.length; i++) {
       var c = collidables[i];
-      if (x < c.x + c.width && x + this.width > c.x) {
-        if (y < c.y + c.height && y + this.height > c.y) {
+      if (x < c.x + c.width && x + self.width > c.x) {
+        if (y < c.y + c.height && y + self.height > c.y) {
           return true;
         }
       }
@@ -154,7 +182,7 @@ Skrit.entity = function(spec) {
     return false;
   };
 
-  extend(constructor.prototype, spec);
+  extend(proto, spec);
 
   return constructor;
 };
@@ -168,23 +196,25 @@ var removeFromArray = function(arr, elem) {
 
 Skrit.world = function(spec) {
   var constructor = function() {
-    this.entities = [];
-    this.collidables = {};
+    var self = this;
+    self.entities = [];
+    self.collidables = {};
+    self.camera = { x: 0, y: 0 };
+    self.spec = spec;
   };
 
   constructor.prototype.add = function(entity) {
-    // see if we actually need this whole object in the future
     this.entities.push(entity);
-    // :/ a bit ew-ish
     entity.world = this;
     entity.born();
   };
 
   constructor.prototype.remove = function(entity) {
+    var entities = this.entities;
     // naive but simple
-    for (var i = 0; i < this.entities.length; i++) {
-      if (entity == this.entities[i]) {
-        this.entities.splice(i,1);
+    for (var i = 0; i < entities.length; i++) {
+      if (entity === entities[i]) {
+        entities.splice(i,1);
         return;
       }
     }
@@ -192,17 +222,20 @@ Skrit.world = function(spec) {
   };
 
   constructor.prototype.setCollisionType = function(entity, type) {
-    if (entity._collisionType && this.collidables[entity._collisionType]) {
-      removeFromArray(this.collidables[entity._collisionType], entity);
+    var self = this;
+    var collidables = self.collidables;
+    if (entity._collisionType && collidables[entity._collisionType]) {
+      removeFromArray(collidables[entity._collisionType], entity);
     }
     entity._collisionType = type;
-    this.collidables[type] = this.collidables[type] || [];
-    this.collidables[type].push(entity);
+    collidables[type] = collidables[type] || [];
+    collidables[type].push(entity);
   };
 
   constructor.prototype.animate = function(context) {
-    context.world = this;
-    this.entities.forEach(function(entity) {
+    var self = this;
+    context.world = self;
+    self.entities.forEach(function(entity) {
       entity._update(context);
     });
 
@@ -212,19 +245,22 @@ Skrit.world = function(spec) {
     // clears the context
     context.canvas.width = context.canvas.width;
 
+    // these let scaled up pixel art draw crisply
     // might be slow to assign these every time, maybe should be just set once,
     // but assigning the width to clear the canvas above resets the context
-    // these let scaled up pixel art draw crisply
-    context.canvasContext.imageSmoothingEnabled = false;
-    context.canvasContext.webkitImageSmoothingEnabled = false;
-    context.canvasContext.scale(this.game.scale, this.game.scale);
+    var canvasContext = context.canvasContext;
+    canvasContext.imageSmoothingEnabled = false;
+    canvasContext.webkitImageSmoothingEnabled = false;
+    var scale = self.game.scale;
+    canvasContext.scale(scale, scale);
 
-    context.canvasContext.fillStyle = "#099";
-    context.canvasContext.fillRect(0, 0, context.game.width, context.game.height);
-    this.entities.forEach(function(entity) {
-      entity._render(context.canvasContext);
+    canvasContext.fillStyle = "#099";
+    canvasContext.fillRect(0, 0, context.game.width, context.game.height);
+    canvasContext.translate(-self.camera.x, -self.camera.y);
+    self.entities.forEach(function(entity) {
+      entity._render(canvasContext);
     });
-    context.canvasContext.stroke();
+    canvasContext.stroke();
   };
 
   extend(constructor.prototype, spec);
@@ -233,45 +269,47 @@ Skrit.world = function(spec) {
 };
 
 Skrit.game = function(spec) {
-  var constructor = function() {
-    this.currentWorld = spec.world;
-    this.currentWorld.game = this;
+  var constructor = function(args) {
+    var self = this;
+    self.currentWorld = args.world;
+    self.currentWorld.game = self;
 
     var canvas = document.createElement("canvas");
 
-    this.mouse = {};
-    this.width = canvas.width = spec.width || 640;
-    this.height = canvas.height = spec.height || 480;
-    this.scale = spec.scale;
-    this.canvas = canvas;
-    this.canvasContext = canvas.getContext("2d");
+    self.mouse = {};
+    self.width = canvas.width = spec.width || 640;
+    self.height = canvas.height = spec.height || 480;
+    self.scale = spec.scale;
+    self.canvas = canvas;
+    self.canvasContext = canvas.getContext("2d");
 
     spec.container.appendChild(canvas);
   };
 
   constructor.prototype._animate = function() {
-    this.canvasContext.imageSmoothingEnabled = false;
-    this.canvasContext.webkitImageSmoothingEnabled = false;
-
-    this.currentWorld.animate({
-      canvas: this.canvas,
-      canvasContext: this.canvasContext,
-      keys: this.keys,
-      game: this,
-      mouse: this.mouse
+    var self = this;
+    self.currentWorld.animate({
+      canvas: self.canvas,
+      canvasContext: self.canvasContext,
+      keys: self.keys,
+      game: self,
+      mouse: self.mouse
     });
-    requestAnimationFrame(this._animate.bind(this));
+    requestAnimationFrame(self._animate.bind(self));
 
-    this.mouse.clicked = false;
+    self.mouse.clicked = false;
   };
 
   constructor.prototype.start = function() {
     // keep track of all the keys
     var self = this;
+    var d = document;
+    var addEventListener = d.addEventListener.bind(d);
+    var mouse = this.mouse;
 
-    this.keys = {};
-    this.keys.pressed = {};
-    document.addEventListener("keydown", function(e) {
+    self.keys = {};
+    self.keys.pressed = {};
+    addEventListener("keydown", function(e) {
       var keyName = toKeyname(e.keyCode);
       // keydown is fired a bunch of times, so check if we were already holding
       // it down.
@@ -281,21 +319,22 @@ Skrit.game = function(spec) {
       self.keys[toKeyname(e.keyCode)] = true;
     });
 
-    document.addEventListener("keyup", function(e) {
+    addEventListener("keyup", function(e) {
       self.keys[toKeyname(e.keyCode)] = false;
     });
 
-    document.addEventListener("mousedown", function(e) {
-      self.mouse.clicked = true;
+    addEventListener("mousedown", function(e) {
+      mouse.clicked = true;
     });
 
-    document.addEventListener("mousemove", function(e) {
-      self.mouse.x = e.x - e.toElement.offsetLeft;
-      self.mouse.y = e.y - e.toElement.offsetTop;
+    addEventListener("mousemove", function(e) {
+      mouse.x = e.x - e.toElement.offsetLeft;
+      mouse.y = e.y - e.toElement.offsetTop;
     });
 
-    requestAnimationFrame(this._animate.bind(this));
+    requestAnimationFrame(self._animate.bind(self));
   };
 
   return constructor;
 };
+})();
