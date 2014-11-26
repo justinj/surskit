@@ -63,8 +63,8 @@ Skrit.entity = function(spec) {
 
     self.hitboxLeft = 0;
     self.hitboxTop = 0;
-    self.width = null;
-    self.height = null;
+    self.width = 0;
+    self.height = 0;
 
     if (specSprite) {
       sprite.rows = specSprite.rows || 1;
@@ -73,8 +73,8 @@ Skrit.entity = function(spec) {
       if (specSprite.image) {
         self.image = new Image();
         self.image.onload = function() {
-          self.width = pixelsToUnits(this.width);
-          self.height = pixelsToUnits(this.height);
+          self.width = self.width || pixelsToUnits(this.width);
+          self.height = self.height || pixelsToUnits(this.height);
         };
         self.image.src = specSprite.image;
       }
@@ -94,8 +94,6 @@ Skrit.entity = function(spec) {
 
   var proto = constructor.prototype;
 
-  // Might want to add an option to replay the animation if it's already playing (like flashpunk
-  // has)
   proto.playAnimation = function(name) {
     var self = this;
     var animation = self.sprite.animations[name];
@@ -272,8 +270,12 @@ Skrit.game = function(spec) {
 
     self.mouse = {};
     self.scale = spec.scale;
-    self.width = pixelsToUnits(canvas.width = spec.width || 640) / spec.scale;
-    self.height = pixelsToUnits(canvas.height = spec.height || 480) / spec.scale;
+    var w = spec.width || 640;
+    var h = spec.height || 480;
+    canvas.width = w * spec.scale
+    canvas.height = h * spec.scale
+    self.width = pixelsToUnits(w);
+    self.height = pixelsToUnits(h);
     self.canvas = canvas;
     self.canvasContext = canvas.getContext("2d");
 
