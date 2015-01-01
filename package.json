@@ -1,21 +1,21 @@
 {
-  "name": "skrit",
+  "name": "surskit",
   "version": "0.0.0",
   "description": "Micro game framework for JS",
-  "main": "skrit.js",
+  "main": "surskit.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/justinj/skrit.git"
+    "url": "https://github.com/justinj/surskit.git"
   },
   "author": "Justin Jaffray",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/justinj/skrit/issues"
+    "url": "https://github.com/justinj/surskit/issues"
   },
-  "homepage": "https://github.com/justinj/skrit",
+  "homepage": "https://github.com/justinj/surskit",
   "dependencies": {
     "pixi": "^0.2.1",
     "pixi.js": "^1.5.3"

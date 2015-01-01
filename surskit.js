@@ -1,13 +1,7 @@
-var Skrit = {};
-
-// README:
-// Skrit is a micro-game engine that should always compile to 4096 bytes or less.
-// Some notes on minification:
-// * Uglify will rename things if they are local variables, so sometimes you will see
-//   local variables introduced somewhat unnecessarily.
+var Surskit = {};
 
 (function() {
-// Adding more of these is going to be a problem for size
+// TODO: Add more of these
 var KEYS = {
   32: "space",
   37: "left",
@@ -45,7 +39,7 @@ var extend = function(target, source) {
   });
 }
 
-Skrit.entity = function(spec) {
+Surskit.entity = function(spec) {
   var constructor = function() {
     var self = this;
 
@@ -65,6 +59,8 @@ Skrit.entity = function(spec) {
     self.hitboxTop = 0;
     self.width = 0;
     self.height = 0;
+
+    self._collisionTypes = [];
 
     if (specSprite) {
       sprite.rows = specSprite.rows || 1;
@@ -167,7 +163,7 @@ Skrit.entity = function(spec) {
       var c = collidables[i];
       if (x < c.x + c.width && x + self.width > c.x) {
         if (y < c.y + c.height && y + self.height > c.y) {
-          return true;
+          return c;
         }
       }
     }
@@ -186,7 +182,7 @@ var removeFromArray = function(arr, elem) {
   }
 }
 
-Skrit.world = function(spec) {
+Surskit.world = function(spec) {
   var constructor = function() {
     var self = this;
     self.entities = [];
@@ -213,15 +209,25 @@ Skrit.world = function(spec) {
     throw new Error("Removed entity that was not in the world!");
   };
 
+  // kinda funkily overloaded, things should be able to belong to multiple types, so we can pass
+  // either a string or an array of strings
   constructor.prototype.setCollisionType = function(entity, type) {
-    var self = this;
-    var collidables = self.collidables;
-    if (entity._collisionType && collidables[entity._collisionType]) {
-      removeFromArray(collidables[entity._collisionType], entity);
+    // ehhhhh I'm not sold
+    if ((typeof type) == "string") {
+      type = [type];
     }
-    entity._collisionType = type;
-    collidables[type] = collidables[type] || [];
-    collidables[type].push(entity);
+
+    var self = this;
+    for (var i = 0; i < entity._collisionTypes.length; i++) {
+      if (self.collidables[entity._collisionTypes[i]]) {
+        removeFromArray(self.collidables[entity._collisionTypes[i]], entity);
+      }
+    }
+    entity._collisionTypes = type;
+    for (var i = 0; i < entity._collisionTypes.length; i++) {
+      self.collidables[type[i]] = self.collidables[type[i]] || [];
+      self.collidables[type[i]].push(entity);
+    }
   };
 
   constructor.prototype.animate = function(context) {
@@ -260,7 +266,7 @@ Skrit.world = function(spec) {
   return constructor;
 };
 
-Skrit.game = function(spec) {
+Surskit.game = function(spec) {
   var constructor = function(args) {
     var self = this;
     self.currentWorld = args.world;
@@ -283,17 +289,34 @@ Skrit.game = function(spec) {
   };
 
   constructor.prototype._animate = function() {
-    var self = this;
-    self.currentWorld.animate({
-      canvas: self.canvas,
-      canvasContext: self.canvasContext,
-      keys: self.keys,
-      game: self,
-      mouse: self.mouse
+    var gamepad = navigator.getGamepads()[0];
+    if (gamepad) {
+      for (var i = 0; i < gamepad.buttons.length; i++) {
+        if (!this.buttons[i] && gamepad.buttons[i].pressed) {
+          this.buttons.pressed[i] = true;
+        } else {
+          this.buttons.pressed[i] = false;
+        }
+        this.buttons[i] = gamepad.buttons[i].pressed;
+      }
+      this.axes = gamepad.axes;
+    } else {
+      this.buttons = null;
+    }
+    this.currentWorld.animate({
+      canvas: this.canvas,
+      canvasContext: this.canvasContext,
+      keys: this.keys,
+      gamepad: {
+        buttons: this.buttons,
+        axes: this.axes
+      },
+      game: this,
+      mouse: this.mouse
     });
-    requestAnimationFrame(self._animate.bind(self));
+    requestAnimationFrame(this._animate.bind(this));
 
-    self.mouse.clicked = false;
+    this.mouse.clicked = false;
   };
 
   constructor.prototype.start = function() {
@@ -305,6 +328,8 @@ Skrit.game = function(spec) {
 
     self.keys = {};
     self.keys.pressed = {};
+    self.buttons = {};
+    self.buttons.pressed = {};
     addEventListener("keydown", function(e) {
       var keyName = toKeyname(e.keyCode);
       // keydown is fired a bunch of times, so check if we were already holding
